@@ -1,0 +1,331 @@
+import pygame
+import sys
+import math
+import random
+from pygame import gfxdraw
+
+# Initialize Pygame
+pygame.init()
+
+# Set up display
+WIDTH, HEIGHT = 1000, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Advanced Platformer")
+
+# Colors
+SKY_BLUE = (135, 206, 235)
+GRASS_GREEN = (34, 139, 34)
+DEEP_RED = (139, 0, 0)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+CLOUD_WHITE = (240, 240, 240, 180)
+
+# Camera settings
+camera_offset = [0, 0]
+
+# Player settings
+player_size = 30
+player_x = 150
+player_y = HEIGHT - 300
+player_speed = 5
+jump_height = 15
+gravity = 0.8
+player_vel_y = 0
+is_jumping = False
+rotation_angle = 0
+
+# Platform settings
+platforms = []
+platform_height = 20
+platform_width = 100
+platform_gap = 150
+
+# Create 10 platforms
+# Replace the platform creation loop with custom messages
+platform_messages = [
+    "Welcome! Jump right!",
+    "ur everything to me, yk that ",
+    " our journey, with ups",
+    "and downs, im so lucky",
+    "to have u",
+    "i love u so much",
+    "i mean it",
+    "ur so beautiful",
+    "and so",
+    "will u go to prom w/ me? Choose"
+]
+
+for i in range(10):
+    platforms.append({
+        'x': 150 + i * (platform_width + platform_gap),
+        'y': HEIGHT - 150 - i * 30,
+        'width': platform_width,
+        'height': platform_height,
+        'text': platform_messages[i],  # Custom message for each platform
+        'active': False,
+        'color': GRASS_GREEN
+    })
+
+# Add YES/NO platforms
+platforms.append({
+    'x': platforms[-1]['x'] + platform_width + platform_gap,
+    'y': platforms[-1]['y'],
+    'width': platform_width,
+    'height': platform_height,
+    'text': "YES - Celebrate!",
+    'active': False,
+    'color': (0, 200, 0)  # Green
+})
+
+platforms.append({
+    'x': platforms[-1]['x'] + platform_width + 50,
+    'y': platforms[-1]['y'],
+    'width': platform_width,
+    'height': platform_height,
+    'text': "NO - Try again",
+    'active': False,
+    'color': (200, 0, 0)  # Red
+})
+
+# Activate first platform
+platforms[0]['active'] = True
+
+# Clouds
+clouds = []
+for _ in range(5):
+    clouds.append({
+        'x': random.randint(0, WIDTH * 2),
+        'y': random.randint(50, 200),
+        'width': random.randint(80, 150),
+        'height': random.randint(40, 70),
+        'speed': random.uniform(0.2, 0.5)
+    })
+
+# Confetti particles
+confetti = []
+confetti_colors = [
+    (255, 0, 0), (0, 255, 0), (0, 0, 255),
+    (255, 255, 0), (255, 0, 255), (0, 255, 255)
+]
+
+# Font
+try:
+    font = pygame.font.SysFont("timesnewroman", 24)
+    big_font = pygame.font.SysFont("timesnewroman", 36)
+except:
+    font = pygame.font.SysFont(None, 24)
+    big_font = pygame.font.SysFont(None, 36)
+
+# Mobile touch controls
+touch_controls = {
+    'left': pygame.Rect(20, HEIGHT - 100, 80, 80),
+    'right': pygame.Rect(120, HEIGHT - 100, 80, 80),
+    'jump': pygame.Rect(WIDTH - 100, HEIGHT - 100, 80, 80)
+}
+
+def create_confetti(x, y):
+    """Generate confetti particles"""
+    for _ in range(50):
+        confetti.append({
+            'x': x + random.randint(-20, 20),
+            'y': y + random.randint(-20, 20),
+            'color': random.choice(confetti_colors),
+            'size': random.randint(3, 8),
+            'vel_x': random.uniform(-2, 2),
+            'vel_y': random.uniform(-5, -1),
+            'life': random.randint(30, 60)
+        })
+
+def update_confetti():
+    """Update confetti particles"""
+    for particle in confetti[:]:
+        particle['x'] += particle['vel_x']
+        particle['y'] += particle['vel_y']
+        particle['vel_y'] += 0.1  # Gravity
+        particle['life'] -= 1
+        
+        if particle['life'] <= 0:
+            confetti.remove(particle)
+
+def draw_confetti():
+    """Draw confetti particles"""
+    for particle in confetti:
+        pygame.draw.rect(
+            screen, particle['color'],
+            (particle['x'] - camera_offset[0], particle['y'] - camera_offset[1],
+             particle['size'], particle['size'])
+        )
+
+def draw_cloud(cloud):
+    """Draw a single cloud"""
+    x, y = cloud['x'] - camera_offset[0] * 0.5, cloud['y']  # Parallax effect
+    
+    # Main cloud body
+    pygame.draw.ellipse(
+        screen, CLOUD_WHITE,
+        (x, y, cloud['width'], cloud['height'])
+    )
+    # Cloud fluff
+    pygame.draw.ellipse(
+        screen, CLOUD_WHITE,
+        (x - cloud['width']//4, y + cloud['height']//3, 
+         cloud['width']//2, cloud['height']//2))
+    
+    pygame.draw.ellipse(
+        screen, CLOUD_WHITE,
+        (x + cloud['width']//2, y + cloud['height']//4, 
+         cloud['width']//2, cloud['height']//2))
+
+def draw_touch_controls():
+    """Draw semi-transparent on-screen buttons"""
+    for control in touch_controls.values():
+        s = pygame.Surface((control.width, control.height), pygame.SRCALPHA)
+        s.fill((100, 100, 100, 128))  # 50% transparent
+        screen.blit(s, (control.x, control.y))
+    
+    # Add labels
+    left_text = font.render("←", True, WHITE)
+    right_text = font.render("→", True, WHITE)
+    jump_text = font.render("↑", True, WHITE)
+    
+    screen.blit(left_text, (touch_controls['left'].x + 30, touch_controls['left'].y + 25))
+    screen.blit(right_text, (touch_controls['right'].x + 30, touch_controls['right'].y + 25))
+    screen.blit(jump_text, (touch_controls['jump'].x + 30, touch_controls['jump'].y + 25))
+
+# Game loop
+clock = pygame.time.Clock()
+running = True
+
+while running:
+    # Handle events
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        
+        # Mobile touch controls
+        if event.type == pygame.FINGERDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+            pos = (event.x * WIDTH, event.y * HEIGHT) if hasattr(event, 'x') else pygame.mouse.get_pos()
+            
+            if touch_controls['left'].collidepoint(pos):
+                player_x -= player_speed * 5
+            elif touch_controls['right'].collidepoint(pos):
+                player_x += player_speed * 5
+            elif touch_controls['jump'].collidepoint(pos) and not is_jumping:
+                player_vel_y = -jump_height
+                is_jumping = True
+                rotation_angle = 0
+    
+    # Keyboard controls (for testing on laptop)
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_LEFT]:
+        player_x -= player_speed
+    if keys[pygame.K_RIGHT]:
+        player_x += player_speed
+    if not is_jumping and keys[pygame.K_SPACE]:
+        player_vel_y = -jump_height
+        is_jumping = True
+        rotation_angle = 0
+    
+    # Apply physics
+    player_vel_y += gravity
+    player_y += player_vel_y
+    
+    # Rotate player when jumping
+    if is_jumping:
+        rotation_angle += 10
+    
+    # Update clouds
+    for cloud in clouds:
+        cloud['x'] += cloud['speed']
+        if cloud['x'] > WIDTH * 2 + camera_offset[0]:
+            cloud['x'] = -200
+    
+    # Update confetti
+    update_confetti()
+    
+    # Check platform collisions
+    player_rect = pygame.Rect(player_x, player_y, player_size, player_size)
+    on_ground = False
+    
+    for platform in platforms:
+        platform_rect = pygame.Rect(platform['x'], platform['y'], platform['width'], platform['height'])
+        
+        if (player_rect.colliderect(platform_rect)) and \
+           player_vel_y > 0 and \
+           player_rect.bottom > platform_rect.top and \
+           player_rect.bottom < platform_rect.top + 20:
+            
+            player_y = platform_rect.top - player_size
+            player_vel_y = 0
+            is_jumping = False
+            on_ground = True
+            
+            if not platform['active']:
+                platform['active'] = True
+                if platform['text'].startswith("YES"):
+                    create_confetti(platform['x'] + platform['width']//2, platform['y'])
+    
+    # Boundary checks
+    if player_y > HEIGHT + 100:
+        player_x = platforms[0]['x'] + platform_width//2
+        player_y = platforms[0]['y'] - player_size
+        player_vel_y = 0
+        is_jumping = False
+    
+    # Update camera to follow player (with some lead space)
+    camera_offset[0] = player_x - WIDTH//3
+    camera_offset[1] = 0  # No vertical camera movement
+    
+    # Draw everything with camera offset
+    screen.fill(SKY_BLUE)
+    
+    # Draw clouds
+    for cloud in clouds:
+        draw_cloud(cloud)
+    
+    # Draw grass
+    pygame.draw.rect(
+        screen, GRASS_GREEN,
+        (0 - camera_offset[0], HEIGHT - 50, WIDTH * 5, 50))
+    
+    # Draw platforms
+    for platform in platforms:
+        pygame.draw.rect(
+            screen, platform['color'],
+            (platform['x'] - camera_offset[0], platform['y'],
+             platform['width'], platform['height']))
+        
+        # Draw platform text in the sky if active
+        if platform['active']:
+            text_surface = font.render(platform['text'], True, BLACK)
+            screen.blit(
+                text_surface,
+                (platform['x'] - camera_offset[0] + platform['width']//2 - text_surface.get_width()//2,
+                 50))
+    
+    # Draw confetti
+    draw_confetti()
+    
+    # Draw player (with rotation)
+    player_surface = pygame.Surface((player_size, player_size), pygame.SRCALPHA)
+    pygame.draw.rect(player_surface, DEEP_RED, (0, 0, player_size, player_size))
+    
+    if is_jumping:
+        rotated_player = pygame.transform.rotate(player_surface, rotation_angle)
+        rotated_rect = rotated_player.get_rect(
+            center=(player_x - camera_offset[0] + player_size//2,
+                    player_y + player_size//2))
+        screen.blit(rotated_player, rotated_rect.topleft)
+    else:
+        screen.blit(
+            player_surface,
+            (player_x - camera_offset[0], player_y))
+    
+    # Draw touch controls (fixed position)
+    draw_touch_controls()
+    
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
+sys.exit()
